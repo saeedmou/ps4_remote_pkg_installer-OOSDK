@@ -13,6 +13,7 @@
 #include "dirent.h"
 #include "sandbird.h"
 #include "tiny-json.h"
+#include "sm-tools.h"
 
 #define CLEANUP_DAY_COUNT 3
 
@@ -60,6 +61,7 @@ static bool handle_api_resume_task(sb_Stream* s, const char* method, const char*
 static bool handle_api_unregister_task(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size);
 static bool handle_api_get_task_progress(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size);
 static bool handle_api_find_task(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size);
+static bool handle_api_sm_tools(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size);
 
 static bool handle_static(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size);
 
@@ -88,6 +90,7 @@ static const struct handler_desc s_get_handlers[] = {
 	{ "/api/unregister_task", &handle_api_unregister_task, false },
 	{ "/api/get_task_progress", &handle_api_get_task_progress, false },
 	{ "/api/find_task", &handle_api_find_task, false },
+	{ "/api/sm-tools", &handle_api_sm_tools, false },
 };
 static const struct handler_desc s_post_handlers[] = {
 	{ "/api/install", &handle_api_install, false },
@@ -103,6 +106,8 @@ static const struct handler_desc s_post_handlers[] = {
 	{ "/api/unregister_task", &handle_api_unregister_task, false },
 	{ "/api/get_task_progress", &handle_api_get_task_progress, false },
 	{ "/api/find_task", &handle_api_find_task, false },
+	{ "/api/sm-tools", &handle_api_sm_tools, false },
+
 };
 
 bool server_start(const char* ip_address, int port, const char* work_dir) {
@@ -1637,4 +1642,45 @@ char *encodeURI(char *str) {
   }
   *pbuf = '\0';
   return buf;
+}
+
+static bool handle_api_sm_tools(sb_Stream* s, const char* method, const char* path, char* in_data, size_t in_size) {
+	static json_t* pool = NULL;
+	const size_t pool_size = 256;
+	const json_t* root;
+	char* ret;
+
+	assert(s != NULL);
+	assert(method != NULL);
+	assert(path != NULL);
+	assert(in_data != NULL);
+
+	pool = (json_t*)malloc(sizeof(*pool) * pool_size);
+	if (!pool) {
+		THROW_ERROR("No memory.");
+	}
+	memset(pool, 0, sizeof(*pool) * pool_size);
+
+	root = json_create(in_data, pool, pool_size);
+	if (!root) {
+		THROW_ERROR("Invalid JSON format.");
+	}
+
+	sm_tools_main_handler(s,root);
+	//kick_result_header_json(s);
+	//sb_writef(s, "{ \"status\": \"success\", \"message\": %s , \"handler\":\"sm-tools\"}\n", ret);
+	//kick_error_json(s, ret);
+
+	if (pool) {
+		free(pool);
+	}
+
+	return true;
+
+err:
+	if (pool) {
+		free(pool);
+	}
+
+	return false;
 }
